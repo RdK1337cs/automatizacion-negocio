@@ -22,6 +22,15 @@ export function isReadOnly(): boolean {
   return getRole() === 'lector';
 }
 
+export function assetUrl(path: string, version = ''): string {
+  const params = new URLSearchParams();
+  const token = getToken();
+  if (token) params.set('token', token);
+  if (version) params.set('v', version);
+  const qs = params.toString();
+  return qs ? `${path}?${qs}` : path;
+}
+
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(ROLE_KEY);

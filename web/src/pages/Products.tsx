@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { api, money, isReadOnly } from '../api';
+import { api, money, isReadOnly, assetUrl } from '../api';
 
 interface Product {
   id: number;
@@ -156,7 +156,11 @@ export function Products() {
                   <img className="thumb lg" src={photoPreview} alt="preview" />
                 )}
                 {!photoPreview && editing?.image && (
-                  <img className="thumb lg" src={`/api/products/${editing.id}/image`} alt={editing.name} />
+                  <img
+                    className="thumb lg"
+                    src={assetUrl(`/api/products/${editing.id}/image`, editing.image)}
+                    alt={editing.name}
+                  />
                 )}
                 <div>
                   <input
@@ -207,7 +211,7 @@ export function Products() {
                   <div className="photo-cell">
                     {p.image ? (
                       <>
-                        <img className="thumb" src={`/api/products/${p.id}/image`} alt={p.name} />
+                        <img className="thumb" src={assetUrl(`/api/products/${p.id}/image`, p.image)} alt={p.name} />
                         {!readonly && <button className="mini danger" title="Quitar foto" onClick={() => removePhoto(p)}>×</button>}
                       </>
                     ) : (
