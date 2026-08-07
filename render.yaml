@@ -11,8 +11,9 @@ services:
     plan: free
     buildCommand: npm install --include=dev && npm install --prefix web --include=dev && npm run build && npm run web:build
     startCommand: npm start
+    # Ojo: no definir NODE_ENV=production acá. Render la aplica también durante el
+    # build y `npm install` omitiría las devDependencies (@types, typescript, vite),
+    # rompiendo la compilación. `--include=dev` en buildCommand la fuerza igualmente.
     envVars:
-      - key: NODE_ENV
-        value: production
       - key: JWT_SECRET
         generateValue: true
