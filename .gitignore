@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+web/node_modules/
+
+# Builds
+dist/
+web/dist/
+
+# Datos y archivos locales (DB, fotos subidas, logs)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Configuración con secretos
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store
+Thumbs.db

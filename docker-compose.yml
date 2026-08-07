@@ -1,0 +1,15 @@
+services:
+  negocio:
+    build: .
+    container_name: automatizacion-negocio
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: production
+      DB_FILE: app.db
+      # Cargá el resto de variables desde .env (WHATSAPP_*, RESEND_API_KEY, JWT_SECRET...)
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data

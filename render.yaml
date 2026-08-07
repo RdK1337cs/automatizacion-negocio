@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: automatizacion-negocio
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm install --prefix web && npm run build && npm run web:build
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATA_DIR
+        value: /data
+      - key: JWT_SECRET
+        generateValue: true
+    disk:
+      name: db-data
+      mountPath: /data
+      sizeGB: 1
