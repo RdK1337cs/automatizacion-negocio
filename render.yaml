@@ -1,3 +1,9 @@
+# Blueprint de Render: crea el servicio web con un clic desde el dashboard
+# (New + -> Blueprint -> seleccionar el repo automatizacion-negocio)
+#
+# Nota: en el plan gratuito el filesystem es efímero: la base SQLite y las fotos
+# se pierden al redeployar. Para datos durables, subí a Starter ($7/mes) y
+# agregá un disco persistente (DATA_DIR=/data, mountPath /data).
 services:
   - type: web
     name: automatizacion-negocio
@@ -8,11 +14,5 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATA_DIR
-        value: /data
       - key: JWT_SECRET
         generateValue: true
-    disk:
-      name: db-data
-      mountPath: /data
-      sizeGB: 1
