@@ -9,7 +9,7 @@ services:
     name: automatizacion-negocio
     runtime: node
     plan: free
-    buildCommand: npm install && npm install --prefix web && npm run build && npm run web:build
+    buildCommand: npm install --include=dev && npm install --prefix web --include=dev && npm run build && npm run web:build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
