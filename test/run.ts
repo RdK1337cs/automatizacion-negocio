@@ -14,7 +14,8 @@ async function main() {
   const { createQuote } = await import('../src/services/quote');
   const { buildQuotePdf } = await import('../src/services/pdf');
   const { handleIncoming } = await import('../src/services/bot');
-  const { createUser, checkCredentials, deleteUser } = await import('../src/services/user');
+  const { createUser, checkCredentials, deleteUser, getUserByUsername, updateUser } = await import('../src/services/user');
+  const { sendVerificationCode, confirmVerificationCode } = await import('../src/services/userVerification');
   const { saveProductImage, productImageInfo } = await import('../src/services/productImage');
   const { createProduct, addProductToBase } = await import('../src/services/productos');
   const { productsForBase } = await import('../src/services/productos');
@@ -133,10 +134,30 @@ async function main() {
   });
 
   await ok('Usuarios: crea, valida credenciales y evita duplicados', () => {
-    createUser({ username: 'operador_test', password: '1234', role: 'operador' });
+    createUser({ username: 'operador_test', password: '1234', role: 'operador', dni: '30123456' });
     assert.ok(checkCredentials('operador_test', '1234'));
     assert.equal(checkCredentials('operador_test', 'mala'), null);
-    assert.throws(() => createUser({ username: 'operador_test', password: '9999', role: 'admin' }), /Ya existe/);
+    assert.throws(
+      () => createUser({ username: 'operador_test', password: '9999', role: 'admin', dni: '30123456' }),
+      /Ya existe/
+    );
+  });
+
+  await ok('Usuarios: DNI obligatorio y contraseña por defecto = DNI', () => {
+    assert.throws(
+      () => createUser({ username: 'sin_dni', password: '1234', role: 'operador', dni: '' }),
+      /DNI/
+    );
+    const u = createUser({ username: 'dni_pass', role: 'operador', dni: '40555666', email: 'a@b.com', phone: '5491160000000' });
+    assert.equal(u.dni, '40555666');
+    assert.ok(checkCredentials('dni_pass', '40555666'), 'debe poder ingresar con su DNI como contraseña');
+  });
+
+  await ok('Usuarios: registra IP del último ingreso', async () => {
+    const { beginLogin } = await import('../src/middleware/auth');
+    const { getUserByUsername } = await import('../src/services/user');
+    beginLogin('dni_pass', '40555666', '203.0.113.7');
+    assert.equal(getUserByUsername('dni_pass')!.last_ip, '203.0.113.7');
   });
 
   await ok('Usuarios: no permite borrar al último administrador', () => {
@@ -178,7 +199,7 @@ async function main() {
   });
 
   await ok('POS: asigna depósitos y usuarios con rol', () => {
-    const user = createUser({ username: 'pos_user', password: '1234', role: 'operador' });
+    const user = createUser({ username: 'pos_user', password: '1234', role: 'operador', dni: '31111222' });
     setPuntoVentaUsers(posId, [{ userId: user.id, role: 'operador' }]);
     assert.ok(getUserPuntoVentaIds(user.id).includes(posId));
     setPosDepositosReplace(posId, [depId]);
@@ -256,6 +277,39 @@ const sent = db
     assert.throws(() => uploadBusinessLogo('data:text/plain;base64,AA=='), /Formato de logo/);
     removeBusinessLogo();
     assert.equal(businessLogoInfo(), null, 'tras quitar no debe existir');
+  });
+
+  await ok('Verificación: email y teléfono envían código y verifican al usuario', () => {
+    const u = createUser({
+      username: 'verify_user',
+      role: 'operador',
+      dni: '40888999',
+      email: 'verify@corp.com',
+      phone: '5491122334444',
+    });
+    sendVerificationCode(u.id, 'email');
+    const email = db.prepare('SELECT body FROM emails ORDER BY id DESC LIMIT 1').get() as { body: string };
+    assert.ok(/verificaci/i.test(email.body), 'el email debe contener el código');
+    const m = /(\d{6})/.exec(email.body);
+    assert.ok(m, 'código en el mail');
+    assert.throws(() => confirmVerificationCode(u.id, 'email', '111111'), /Código incorrecto/);
+    confirmVerificationCode(u.id, 'email', m![1]);
+    assert.equal(getUserByUsername('verify_user')!.email_verified, 1, 'email marcado verificado');
+
+    sendVerificationCode(u.id, 'sms');
+    const msg = db
+      .prepare("SELECT body FROM messages WHERE direction='out' ORDER BY id DESC LIMIT 1")
+      .get() as { body: string };
+    const m2 = /verificación: (\d{6})/i.exec(msg.body);
+    assert.ok(m2, 'código en el mensaje de WhatsApp');
+    confirmVerificationCode(u.id, 'sms', m2![1]);
+    assert.equal(getUserByUsername('verify_user')!.phone_verified, 1, 'teléfono marcado verificado');
+  });
+
+  await ok('Verificación: cambiar email o teléfono desactiva la verificación previa', () => {
+    const u = getUserByUsername('verify_user')!;
+    updateUser(u.id, { email: 'otro@corp.com' });
+    assert.equal(getUserByUsername('verify_user')!.email_verified, 0, 'al cambiar email se desverifica');
   });
 
   console.log('\nResultado:');

@@ -11,7 +11,7 @@ authRouter.post(
     const { username, password } = z
       .object({ username: z.string().min(1), password: z.string().min(1) })
       .parse(req.body);
-    const result = beginLogin(username, password);
+    const result = beginLogin(username, password, req.ip ?? '');
     if (!result) {
       res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
       return;

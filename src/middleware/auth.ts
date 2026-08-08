@@ -25,10 +25,10 @@ export type LoginResult =
   | { pending2fa: true; token: string; phone: string }
   | null;
 
-export function beginLogin(username: string, password: string): LoginResult {
+export function beginLogin(username: string, password: string, ip = ''): LoginResult {
   const user = checkCredentials(username, password);
   if (!user) return null;
-  touchLogin(user.id);
+  touchLogin(user.id, ip);
   if (user.role === 'admin' && twoFactorEnabled()) {
     const phone = beginTwoFactor(user.id);
     return {

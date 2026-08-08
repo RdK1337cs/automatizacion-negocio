@@ -10,6 +10,12 @@ interface User {
   active: number;
   created_at: string;
   last_login: string | null;
+  last_ip: string;
+  dni: string;
+  email: string;
+  phone: string;
+  email_verified: number;
+  phone_verified: number;
   pos_ids: number[];
 }
 interface Pos {
@@ -23,7 +29,15 @@ const ROLE_LABELS: Record<Role, string> = {
   lector: 'Solo lectura',
 };
 
-const empty = { username: '', password: '', role: 'operador' as Role, posIds: [] as number[] };
+const empty = {
+  username: '',
+  password: '',
+  role: 'operador' as Role,
+  dni: '',
+  email: '',
+  phone: '',
+  posIds: [] as number[],
+};
 
 export function Users() {
   const [users, setUsers] = useState<User[]>([]);
@@ -75,11 +89,53 @@ export function Users() {
     }
   };
 
-  const resetPassword = async (u: User) => {
-    const password = prompt(`Nueva contraseña para "${u.username}" (mínimo 4 caracteres):`);
-    if (!password) return;
+  const verify = async (u: User, channel: 'email' | 'sms') => {
+    const label = channel === 'email' ? 'email' : 'WhatsApp';
+    const target = channel === 'email' ? u.email : u.phone;
+    if (!target) {
+      alert(`El usuario "${u.username}" no tiene ${channel === 'email' ? 'email' : 'teléfono'} cargado.`);
+      return;
+    }
+    const sendAndAsk = async (reintento = false) => {
+      await api(`/api/users/${u.id}/verify/send`, { body: { channel } });
+      const code = prompt(
+        `${reintento ? 'Se reenvió' : 'Se envió'} un código de verificación por ${label} (${target}).\n\n` +
+          'Ingresá el código de 6 dígitos (modo prueba: se ve en la página Logs):'
+      );
+      return code;
+    };
     try {
-      await api(`/api/users/${u.id}/password`, { method: 'PATCH', body: { password } });
+      const code = await sendAndAsk();
+      if (!code) return;
+      await api(`/api/users/${u.id}/verify/confirm`, { body: { channel, code } });
+      await load();
+      flash(`${label} verificado`);
+    } catch (er) {
+      const msg = (er as Error).message;
+      if (/no hay un código pendiente|expiró|ya fue utilizado|Demasiados/.test(msg)) {
+        try {
+          const retry = await sendAndAsk(true);
+          if (!retry) return;
+          await api(`/api/users/${u.id}/verify/confirm`, { body: { channel, code: retry } });
+          await load();
+          flash(`${label} verificado`);
+          return;
+        } catch (er2) {
+          alert((er2 as Error).message);
+          return;
+        }
+      }
+      alert(msg);
+    }
+  };
+
+  const resetPassword = async (u: User) => {
+    const password = prompt(
+      `Nueva contraseña para "${u.username}" (mínimo 4 caracteres; vacío = su DNI ${u.dni}):`
+    );
+    if (password === null) return;
+    try {
+      await api(`/api/users/${u.id}/password`, { method: 'PATCH', body: { password: password || u.dni } });
       flash('Contraseña actualizada');
     } catch (er) {
       alert((er as Error).message);
@@ -120,12 +176,39 @@ export function Users() {
               />
             </label>
             <label>
+              DNI (obligatorio)
+              <input
+                value={form.dni}
+                onChange={(e) => setForm({ ...form, dni: e.target.value.replace(/\D/g, '') })}
+                inputMode="numeric"
+                required
+                placeholder="Número de documento"
+              />
+            </label>
+            <label>
+              Email
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="usuario@empresa.com"
+              />
+            </label>
+            <label>
+              Teléfono (WhatsApp)
+              <input
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                placeholder="Ej: 5491160000000"
+              />
+            </label>
+            <label>
               Contraseña
               <input
                 type="password"
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                required
+                placeholder="Vacío = su DNI"
               />
             </label>
             <label>
@@ -174,10 +257,12 @@ export function Users() {
         <thead>
           <tr>
             <th>Usuario</th>
+            <th>DNI</th>
+            <th>Email</th>
+            <th>Teléfono</th>
             <th>Rol</th>
             <th>POS asignados</th>
             <th>Estado</th>
-            <th>Creado</th>
             <th>Último ingreso</th>
             <th>Acciones</th>
           </tr>
@@ -190,6 +275,33 @@ export function Users() {
                 <td>
                   {u.username}
                   {isMe && <span className="tag">vos</span>}
+                </td>
+                <td>{u.dni || '—'}</td>
+                <td className="pos-list">
+                  {u.email ? (
+                    <>
+                      {u.email}
+                      <br />
+                      <span className={u.email_verified ? 'pill pill-confirmed' : 'pill pill-pending'}>
+                        {u.email_verified ? 'verificado' : 'sin verificar'}
+                      </span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </td>
+                <td className="pos-list">
+                  {u.phone ? (
+                    <>
+                      {u.phone}
+                      <br />
+                      <span className={u.phone_verified ? 'pill pill-confirmed' : 'pill pill-pending'}>
+                        {u.phone_verified ? 'verificado' : 'sin verificar'}
+                      </span>
+                    </>
+                  ) : (
+                    '—'
+                  )}
                 </td>
                 <td>
                   <select
@@ -236,9 +348,16 @@ export function Users() {
                   </label>
                 </td>
                 <td>{u.created_at.replace('T', ' ').slice(0, 16)}</td>
-                <td>{u.last_login ? u.last_login.replace('T', ' ').slice(0, 16) : '—'}</td>
+                <td>
+                  {u.last_login ? `${u.last_login.replace('T', ' ').slice(0, 16)}` : '—'}
+                  {u.last_ip && (
+                    <div className="muted" style={{ fontSize: 11.5 }}>IP: {u.last_ip}</div>
+                  )}
+                </td>
                 <td className="actions">
-                  <button onClick={() => resetPassword(u)}>Cambiar contraseña</button>
+                  <button onClick={() => verify(u, 'email')} title="Enviar y comprobar código por email">Verificar email</button>
+                  <button onClick={() => verify(u, 'sms')} title="Enviar y comprobar código por WhatsApp">Verificar teléfono</button>
+                  <button onClick={() => resetPassword(u)}>Contraseña</button>
                   {!isMe && (
                     <button className="danger" onClick={() => del(u)}>
                       ×

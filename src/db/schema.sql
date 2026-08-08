@@ -12,7 +12,25 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL DEFAULT 'operador' CHECK (role IN ('admin','operador','lector')),
   active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_login TEXT
+  last_login TEXT,
+  last_ip TEXT DEFAULT '',
+  dni TEXT NOT NULL DEFAULT '',
+  email TEXT DEFAULT '',
+  phone TEXT DEFAULT '',
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  phone_verified INTEGER NOT NULL DEFAULT 0
+);
+
+-- Verificaciones de identidad (email / teléfono) por usuario
+CREATE TABLE IF NOT EXISTS user_verifications (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  channel TEXT NOT NULL CHECK (channel IN ('email','sms')),
+  code_hash TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  used INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
 -- Puntos de venta (lugares físicos donde se vende)
