@@ -16,15 +16,15 @@ interface DashboardData {
   recentOrders: Array<{ id: number; order_number: string; customer_name: string; status: string; total: number }>;
 }
 
-export function Dashboard() {
+export function Dashboard({ pos }: { pos: number }) {
   const [data, setData] = useState<DashboardData | null>(null);
   const [err, setErr] = useState('');
 
   useEffect(() => {
-    api<DashboardData>('/api/dashboard')
+    api<DashboardData>(`/api/dashboard${pos ? `?pos=${pos}` : ''}`)
       .then(setData)
       .catch((e) => setErr((e as Error).message));
-  }, []);
+  }, [pos]);
 
   if (err) return <div className="error">{err}</div>;
   if (!data) return <div className="loading">Cargando…</div>;

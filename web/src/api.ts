@@ -1,5 +1,14 @@
 export const TOKEN_KEY = 'negocio_token';
 export const ROLE_KEY = 'negocio_role';
+export const POS_KEY = 'negocio_pos';
+
+export function getPos(): string {
+  return localStorage.getItem(POS_KEY) ?? '';
+}
+
+export function setPos(pos: string): void {
+  localStorage.setItem(POS_KEY, pos);
+}
 
 export function getToken(): string {
   return localStorage.getItem(TOKEN_KEY) ?? '';
@@ -34,6 +43,7 @@ export function assetUrl(path: string, version = ''): string {
 export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(ROLE_KEY);
+  localStorage.removeItem(POS_KEY);
 }
 
 export async function api<T = unknown>(

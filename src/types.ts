@@ -3,11 +3,45 @@ export interface Product {
   code: string;
   name: string;
   description: string;
-  price: number;
-  stock: number;
-  min_stock: number;
   active: number;
   image: string | null;
+  created_at: string;
+}
+
+export interface DepotStock {
+  deposito_id: number;
+  deposito_name: string;
+  quantity: number;
+}
+
+export interface ProductView extends Product {
+  base_id: number;
+  price: number;
+  min_stock: number;
+  stock_total: number;
+  by_deposito: DepotStock[];
+}
+
+export interface PuntoVenta {
+  id: number;
+  name: string;
+  location: string;
+  active: number;
+  created_at: string;
+}
+
+export interface Deposito {
+  id: number;
+  name: string;
+  location: string;
+  active: number;
+  created_at: string;
+}
+
+export interface Base {
+  id: number;
+  name: string;
+  active: number;
   created_at: string;
 }
 
@@ -20,6 +54,13 @@ export interface User {
   active: number;
   created_at: string;
   last_login: string | null;
+  pos: UserPos[];
+}
+
+export interface UserPos {
+  pos_id: number;
+  pos_name: string;
+  role: 'operador' | 'lector';
 }
 
 export interface OrderItem {
@@ -40,6 +81,9 @@ export interface Order {
   customer_email: string;
   source: 'panel' | 'whatsapp' | 'api';
   status: 'pending' | 'confirmed' | 'cancelled' | 'delivered';
+  pos_id: number | null;
+  base_id: number | null;
+  deposito_id: number | null;
   total: number;
   notes: string;
   created_at: string;
@@ -66,6 +110,9 @@ export interface Quote {
   source: 'manual' | 'whatsapp' | 'panel';
   status: 'draft' | 'sent' | 'approved' | 'rejected' | 'expired';
   valid_days: number;
+  pos_id: number | null;
+  base_id: number | null;
+  deposito_id: number | null;
   total: number;
   notes: string;
   created_at: string;
@@ -75,3 +122,4 @@ export interface Quote {
 
 export type OrderStatus = Order['status'];
 export type QuoteStatus = Quote['status'];
+export type PerPosRole = 'operador' | 'lector';

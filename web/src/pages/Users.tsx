@@ -10,6 +10,11 @@ interface User {
   active: number;
   created_at: string;
   last_login: string | null;
+  pos_ids: number[];
+}
+interface Pos {
+  id: number;
+  name: string;
 }
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -18,10 +23,11 @@ const ROLE_LABELS: Record<Role, string> = {
   lector: 'Solo lectura',
 };
 
-const empty = { username: '', password: '', role: 'operador' as Role };
+const empty = { username: '', password: '', role: 'operador' as Role, posIds: [] as number[] };
 
 export function Users() {
   const [users, setUsers] = useState<User[]>([]);
+  const [posList, setPosList] = useState<Pos[]>([]);
   const [me, setMe] = useState<{ username: string } | null>(null);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
@@ -35,7 +41,11 @@ export function Users() {
 
   useEffect(() => {
     load();
+    api<Pos[]>('/api/pos').then(setPosList).catch(() => undefined);
   }, []);
+
+  const togglePos = (ids: number[], id: number) =>
+    ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id];
 
   const flash = (msg: string) => {
     setOk(msg);
@@ -56,7 +66,7 @@ export function Users() {
     }
   };
 
-  const update = async (u: User, patch: { role?: Role; active?: boolean }) => {
+  const update = async (u: User, patch: { role?: Role; active?: boolean; posIds?: number[] }) => {
     try {
       await api(`/api/users/${u.id}`, { method: 'PUT', body: patch });
       await load();
@@ -130,6 +140,25 @@ export function Users() {
               </select>
             </label>
           </div>
+          {posList.length > 0 && (
+            <div>
+              <h4 className="muted">Puntos de venta asignados</h4>
+              <div className="tag-row">
+                {posList.map((p) => (
+                  <label key={p.id} className="check">
+                    <input
+                      type="checkbox"
+                      checked={form.posIds.includes(p.id)}
+                      onChange={(e) =>
+                        setForm({ ...form, posIds: e.target.checked ? [...form.posIds, p.id] : form.posIds.filter((x) => x !== p.id) })
+                      }
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="form-actions">
             <button className="primary" type="submit">
               Crear usuario
@@ -146,6 +175,7 @@ export function Users() {
           <tr>
             <th>Usuario</th>
             <th>Rol</th>
+            <th>POS asignados</th>
             <th>Estado</th>
             <th>Creado</th>
             <th>Último ingreso</th>
@@ -173,6 +203,26 @@ export function Users() {
                       </option>
                     ))}
                   </select>
+                </td>
+                <td className="pos-list">
+                  {posList.length === 0
+                    ? '—'
+                    : posList.map((p) => (
+                        <span key={p.id}>
+                          <label className="check">
+                            <input
+                              type="checkbox"
+                              disabled={isMe}
+                              checked={(u.pos_ids ?? []).includes(p.id)}
+                              onChange={(e) => {
+                                const next = togglePos(u.pos_ids ?? [], p.id);
+                                update(u, { posIds: next });
+                              }}
+                            />
+                            {p.name}
+                          </label>
+                        </span>
+                      ))}
                 </td>
                 <td>
                   <label className="check">

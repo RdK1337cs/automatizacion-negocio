@@ -9,8 +9,10 @@ import {
   updateQuoteStatus,
   deleteQuote,
   quotePdfFile,
+  quoteCatalog,
 } from '../services/quote';
-import { getStatusLabel } from '../lib/labels';
+import { nameOf } from '../services/labels';
+import { getSetting } from '../services/settings';
 import type { Quote } from '../types';
 
 export const quotesRouter = Router();
@@ -29,13 +31,23 @@ const quoteSchema = z.object({
   source: z.enum(['manual', 'whatsapp', 'panel']).optional().default('panel'),
   validDays: z.coerce.number().int().positive().optional(),
   notes: z.string().optional().default(''),
+  posId: z.coerce.number().int().positive().optional(),
+  baseId: z.coerce.number().int().positive().optional(),
+  depositoId: z.coerce.number().int().positive().optional(),
   items: z.array(itemSchema).min(1),
 });
 
 const statusSchema = z.enum(['draft', 'sent', 'approved', 'rejected', 'expired']);
 
-quotesRouter.get('/', ah((_req, res) => {
-  res.json(listQuotes().map(withLabels));
+quotesRouter.get('/', ah((req, res) => {
+  const posId = req.query.pos ? Number(req.query.pos) : undefined;
+  res.json(listQuotes(posId).map(withLabels));
+}));
+
+quotesRouter.get('/catalog', ah((req, res) => {
+  const baseId = Number(req.query.base ?? Number(getSetting('whatsapp_default_base') || 1));
+  const depositoId = Number(req.query.deposito ?? Number(getSetting('whatsapp_default_deposito') || 1));
+  res.json(quoteCatalog(baseId, depositoId));
 }));
 
 quotesRouter.get('/:id', ah((req, res) => {
@@ -46,7 +58,12 @@ quotesRouter.get('/:id', ah((req, res) => {
 
 quotesRouter.post('/', ah((req, res) => {
   const data = quoteSchema.parse(req.body);
-  const quote = createQuote(data);
+  const quote = createQuote({
+    ...data,
+    posId: data.posId ?? Number(getSetting('whatsapp_default_pos') || 1),
+    baseId: data.baseId ?? Number(getSetting('whatsapp_default_base') || 1),
+    depositoId: data.depositoId ?? Number(getSetting('whatsapp_default_deposito') || 1),
+  });
   res.status(201).json(withLabels(quote));
 }));
 
@@ -74,6 +91,23 @@ quotesRouter.delete('/:id', ah((req, res) => {
   res.status(204).send();
 }));
 
-function withLabels<T extends Quote>(quote: T): T & { status_label: string } {
-  return { ...quote, status_label: getStatusLabel(quote.status) };
+function withLabels<T extends Quote>(quote: T): T & { status_label: string; context_label?: string } {
+  const extra: { status_label: string; context_label?: string } = {
+    status_label: quoteStatusLabel(quote.status),
+  };
+  if (quote.pos_id && quote.base_id && quote.deposito_id) {
+    extra.context_label = nameOf(quote.pos_id, quote.base_id, quote.deposito_id).label;
+  }
+  return { ...quote, ...extra };
+}
+
+function quoteStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    draft: 'Borrador',
+    sent: 'Enviado',
+    approved: 'Aprobado',
+    rejected: 'Rechazado',
+    expired: 'Expirado',
+  };
+  return map[status] ?? status;
 }

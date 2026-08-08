@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { getToken, clearToken, api, isAdmin } from './api';
+import { getToken, clearToken, api, isAdmin, getPos, setPos } from './api';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Products } from './pages/Products';
@@ -9,8 +9,38 @@ import { Quotes } from './pages/Quotes';
 import { Logs } from './pages/Logs';
 import { Settings } from './pages/Settings';
 import { Users } from './pages/Users';
+import { PosPage } from './pages/Pos';
+import { BasesPage } from './pages/Bases';
+import { DepositosPage } from './pages/Depositos';
 
-function Sidebar() {
+interface Pos {
+  id: number;
+  name: string;
+}
+
+function PosSelector({ pos, onPick }: { pos: string; onPick: (id: string) => void }) {
+  const [options, setOptions] = useState<Pos[]>([]);
+  useEffect(() => {
+    api<Pos[]>('/api/pos/mine')
+      .then((mine) => setOptions(mine.length > 0 ? mine : ([] as Pos[])))
+      .catch(() => api<Pos[]>('/api/pos').then(setOptions).catch(() => undefined));
+  }, []);
+  if (options.length === 0) return null;
+  return (
+    <div className="pos-selector">
+      <label>POS: </label>
+      <select value={pos} onChange={(e) => onPick(e.target.value)}>
+        {options.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function Sidebar({ pos, onPickPos }: { pos: string; onPickPos: (id: string) => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const links = [
@@ -21,7 +51,14 @@ function Sidebar() {
     { to: '/logs', label: 'Logs', icon: '≣' },
     { to: '/ajustes', label: 'Ajustes', icon: '⚙' },
   ];
-  if (isAdmin()) links.push({ to: '/usuarios', label: 'Usuarios', icon: '👤' });
+  if (isAdmin()) {
+    links.push(
+      { to: '/pos', label: 'Puntos de venta', icon: '⚑' },
+      { to: '/bases', label: 'Bases y precios', icon: '◐' },
+      { to: '/depositos', label: 'Depósitos y stock', icon: '▣' },
+      { to: '/usuarios', label: 'Usuarios', icon: '👤' }
+    );
+  }
   const logout = () => {
     clearToken();
     navigate('/');
@@ -29,6 +66,7 @@ function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="logo">⚡ Negocio</div>
+      <PosSelector pos={pos} onPick={onPickPos} />
       <nav>
         {links.map((l) => (
           <Link key={l.to} to={l.to} className={location.pathname.startsWith(l.to) ? 'active' : ''}>
@@ -41,11 +79,16 @@ function Sidebar() {
   );
 }
 
-function Layout({ children, health }: { children: React.ReactNode; health?: { whatsapp?: string; email?: string } }) {
+function Layout({ children, health, pos, onPickPos }: {
+  children: React.ReactNode;
+  health?: { whatsapp?: string; email?: string };
+  pos: string;
+  onPickPos: (id: string) => void;
+}) {
   const sim = health && (health.whatsapp === 'simulacion' || health.email === 'simulacion');
   return (
     <div className="app">
-      <Sidebar />
+      <Sidebar pos={pos} onPickPos={onPickPos} />
       <main className="content">
         {sim && (
           <div className="sim-banner">
@@ -65,6 +108,7 @@ function Layout({ children, health }: { children: React.ReactNode; health?: { wh
 function Protected() {
   const [health, setHealth] = useState<{ whatsapp?: string; email?: string } | null>(null);
   const [failed, setFailed] = useState(false);
+  const [pos, setPosState] = useState(getPos());
   useEffect(() => {
     api<{ whatsapp?: string; email?: string }>('/api/health')
       .then(setHealth)
@@ -73,15 +117,23 @@ function Protected() {
   const token = getToken();
   if (!token) return <Navigate to="/" replace />;
   if (!health && !failed) return <div className="loading">Cargando…</div>;
+  const pickPos = (id: string) => {
+    setPos(String(id));
+    setPosState(String(id));
+    window.dispatchEvent(new Event('poschange'));
+  };
   return (
-    <Layout health={health ?? undefined}>
+    <Layout health={health ?? undefined} pos={pos} onPickPos={pickPos}>
       <Routes>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/productos" element={<Products />} />
-        <Route path="/pedidos" element={<Orders />} />
-        <Route path="/presupuestos" element={<Quotes />} />
+        <Route path="/dashboard" element={<Dashboard pos={Number(pos)} />} />
+        <Route path="/productos" element={<Products pos={Number(pos)} />} />
+        <Route path="/pedidos" element={<Orders pos={Number(pos)} />} />
+        <Route path="/presupuestos" element={<Quotes pos={Number(pos)} />} />
         <Route path="/logs" element={<Logs />} />
         <Route path="/ajustes" element={<Settings />} />
+        <Route path="/pos" element={isAdmin() ? <PosPage /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/bases" element={isAdmin() ? <BasesPage /> : <Navigate to="/dashboard" replace />} />
+        <Route path="/depositos" element={isAdmin() ? <DepositosPage /> : <Navigate to="/dashboard" replace />} />
         <Route
           path="/usuarios"
           element={isAdmin() ? <Users /> : <Navigate to="/dashboard" replace />}

@@ -129,3 +129,11 @@ input[type="checkbox"] { width: auto; }
 .photo-picker { display: flex; gap: 12px; align-items: center; }
 button.mini { padding: 4px 8px; font-size: 12px; border-radius: 6px; }
 button.mini.danger { background: #fdecec; color: var(--danger); border-color: #f5c6c6; }
+.pos-selector { margin: 14px 0 4px; padding: 0 18px; color: #ccc; font-size: 13px; }
+.pos-selector select { width: 100%; padding: 6px 8px; border-radius: 6px; border: 1px solid #334; background: #1f2430; color: #fff; }
+.tag-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.tag-row .check { font-size: 12.5px; }
+.inline-form { display: flex; gap: 8px; align-items: center; }
+.inline-form input { width: 160px; }
+.pos-list { font-size: 12.5px; }
+.w-input { width: 70px; }

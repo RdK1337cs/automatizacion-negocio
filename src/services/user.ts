@@ -15,7 +15,7 @@ export interface UserRow {
   last_login: string | null;
 }
 
-export type PublicUser = Omit<UserRow, 'password_hash'>;
+export type PublicUser = Omit<UserRow, 'password_hash'> & { pos_ids: number[] };
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: 'Administrador',
@@ -23,16 +23,35 @@ const ROLE_LABELS: Record<Role, string> = {
   lector: 'Solo lectura',
 };
 
+export function getUserPosIds(userId: number): number[] {
+  return (
+    getDb()
+      .prepare('SELECT pos_id FROM user_pos WHERE user_id = ?')
+      .all(userId) as Array<{ pos_id: number }>
+  ).map((r) => r.pos_id);
+}
+
+export function assignUserPositions(userId: number, posIds: number[]): void {
+  if (!getUserById(userId)) throw new HttpError(404, 'Usuario no encontrado');
+  const db = getDb();
+  db.prepare('DELETE FROM user_pos WHERE user_id = ?').run(userId);
+  for (const posId of posIds) {
+    db.prepare('INSERT INTO user_pos (user_id, pos_id) VALUES (?, ?)').run(userId, posId);
+  }
+}
+
 export function roleLabel(role: Role): string {
   return ROLE_LABELS[role] ?? role;
 }
 
 export function listUsers(): PublicUser[] {
-  return getDb()
-    .prepare(
-      'SELECT id, username, role, active, created_at, last_login FROM users ORDER BY id ASC'
-    )
-    .all() as unknown as PublicUser[];
+  return (
+    getDb()
+      .prepare(
+        'SELECT id, username, role, active, created_at, last_login FROM users ORDER BY id ASC'
+      )
+      .all() as unknown as Array<Omit<PublicUser, 'pos_ids'>>
+  ).map((u) => ({ ...u, pos_ids: getUserPosIds(u.id) }));
 }
 
 export function getUserById(id: number): PublicUser | null {
@@ -57,6 +76,7 @@ function toPublicFields(row: UserRow): PublicUser {
     active: row.active,
     created_at: row.created_at,
     last_login: row.last_login,
+    pos_ids: getUserPosIds(row.id),
   };
 }
 

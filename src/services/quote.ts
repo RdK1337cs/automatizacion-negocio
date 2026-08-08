@@ -2,13 +2,15 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { getDb } from '../db/db';
 import { HttpError } from '../lib/http';
-import { getProduct } from './stock';
+import { getProduct, ensureProductInBase, productsForBase } from './productos';
+import { getDeposito, getPuntoVenta } from './pos';
+import { getBase } from './catalogo';
 import { buildQuotePdf } from './pdf';
-import { sendMedia } from './whatsapp';
-import { sendEnabled } from './whatsapp';
+import { sendMedia, sendEnabled } from './whatsapp';
 import { sendEmail, buildQuoteEmailHtml, emailEnabled } from './email';
 import { getSetting } from './settings';
-import type { Quote, QuoteItem } from '../types';
+import { basePrice, defaultPosId, defaultBaseId, defaultDepositoId } from './order';
+import type { Quote, QuoteItem, ProductView } from '../types';
 
 export interface QuoteDraftItem {
   productId?: number;
@@ -22,6 +24,9 @@ export interface CreateQuoteInput {
   customerPhone?: string;
   customerEmail?: string;
   source: 'manual' | 'whatsapp' | 'panel';
+  posId: number;
+  baseId: number;
+  depositoId: number;
   validDays?: number;
   notes?: string;
   items: QuoteDraftItem[];
@@ -34,16 +39,20 @@ export function nextQuoteNumber(): string {
 
 export function createQuote(input: CreateQuoteInput): Quote {
   const db = getDb();
+  getPuntoVenta(input.posId);
+  getBase(input.baseId);
+  getDeposito(input.depositoId);
   const items: QuoteItem[] = input.items.map((it) => {
     const quantity = Math.max(1, Math.round(it.quantity || 1));
     if (it.productId) {
+      ensureProductInBase(it.productId, input.baseId);
       const p = getProduct(it.productId);
       return {
         product_id: p.id,
         description: it.description || `${p.name}${p.description ? ` - ${p.description}` : ''}`,
         quantity,
-        unit_price: it.unitPrice ?? p.price,
-        subtotal: (it.unitPrice ?? p.price) * quantity,
+        unit_price: it.unitPrice ?? basePrice(p.id, input.baseId),
+        subtotal: (it.unitPrice ?? basePrice(p.id, input.baseId)) * quantity,
       };
     }
     return {
@@ -60,8 +69,8 @@ export function createQuote(input: CreateQuoteInput): Quote {
 
   const res = db
     .prepare(
-      `INSERT INTO quotes (quote_number, customer_name, customer_phone, customer_email, source, valid_days, total, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO quotes (quote_number, customer_name, customer_phone, customer_email, source, valid_days, pos_id, base_id, deposito_id, total, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       number,
@@ -70,6 +79,9 @@ export function createQuote(input: CreateQuoteInput): Quote {
       input.customerEmail ?? '',
       input.source,
       validDays,
+      input.posId,
+      input.baseId,
+      input.depositoId,
       total,
       input.notes ?? ''
     );
@@ -83,6 +95,10 @@ export function createQuote(input: CreateQuoteInput): Quote {
   return getQuote(id) as Quote;
 }
 
+export function quoteCatalog(baseId: number, depositoId: number): ProductView[] {
+  return productsForBase(baseId, [depositoId]);
+}
+
 export function getQuote(id: number): Quote | null {
   const db = getDb();
   const row = db.prepare('SELECT * FROM quotes WHERE id = ?').get(id) as Quote | undefined;
@@ -91,9 +107,13 @@ export function getQuote(id: number): Quote | null {
   return row;
 }
 
-export function listQuotes(): Quote[] {
+export function listQuotes(posId?: number): Quote[] {
   const db = getDb();
-  const quotes = db.prepare('SELECT * FROM quotes ORDER BY id DESC').all() as Quote[];
+  const quotes = (
+    posId
+      ? db.prepare('SELECT * FROM quotes WHERE pos_id = ? ORDER BY id DESC').all(posId)
+      : db.prepare('SELECT * FROM quotes ORDER BY id DESC').all()
+  ) as Quote[];
   const items = db.prepare('SELECT * FROM quote_items ORDER BY id').all() as QuoteItem[];
   const byQuote = new Map<number, QuoteItem[]>();
   for (const it of items) {
@@ -167,6 +187,18 @@ export function updateQuoteStatus(id: number, status: Quote['status']): Quote {
 
 export function deleteQuote(id: number): void {
   getDb().prepare('DELETE FROM quotes WHERE id = ?').run(id);
+}
+
+export function quoteContext(
+  posId?: number,
+  baseId?: number,
+  depositoId?: number
+): { posId: number; baseId: number; depositoId: number } {
+  return {
+    posId: posId ?? defaultPosId(),
+    baseId: baseId ?? defaultBaseId(),
+    depositoId: depositoId ?? defaultDepositoId(),
+  };
 }
 
 function normalizePhone(p: string): string {

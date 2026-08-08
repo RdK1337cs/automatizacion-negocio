@@ -19,6 +19,7 @@ interface Quote {
   source: string;
   status: string;
   status_label?: string;
+  context_label?: string;
   valid_days: number;
   notes: string;
   total: number;
@@ -30,10 +31,22 @@ interface Product {
   name: string;
   price: number;
 }
+interface Base {
+  id: number;
+  name: string;
+}
+interface Deposito {
+  id: number;
+  name: string;
+}
 
-export function Quotes() {
+export function Quotes({ pos }: { pos: number }) {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [bases, setBases] = useState<Base[]>([]);
+  const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const [baseSelected, setBaseSelected] = useState(0);
+  const [depositoSelected, setDepositoSelected] = useState(0);
   const [err, setErr] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -47,16 +60,30 @@ export function Quotes() {
   });
 
   const load = () =>
-    Promise.all([api<Quote[]>('/api/quotes'), api<Product[]>('/api/products')])
-      .then(([q, p]) => {
-        setQuotes(q);
-        setProducts(p);
+    api<Quote[]>(`/api/quotes${pos ? `?pos=${pos}` : ''}`).then(setQuotes).catch((e) => setErr((e as Error).message));
+
+  useEffect(() => {
+    Promise.all([api<Base[]>('/api/bases'), api<Deposito[]>('/api/depositos')])
+      .then(([b, d]) => {
+        setBases(b);
+        setDepositos(d);
+        setBaseSelected((prev) => prev || b[0]?.id || 0);
+        setDepositoSelected((prev) => prev || d[0]?.id || 0);
       })
-      .catch((e) => setErr((e as Error).message));
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos]);
+
+  useEffect(() => {
+    if (!baseSelected) return;
+    api<Product[]>(`/api/products?base=${baseSelected}${pos ? `&pos=${pos}` : ''}`)
+      .then(setProducts)
+      .catch(() => undefined);
+  }, [baseSelected, pos]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -76,6 +103,9 @@ export function Quotes() {
           customerEmail: form.customerEmail,
           validDays: Number(form.validDays),
           source: 'panel',
+          posId: pos,
+          baseId: baseSelected,
+          depositoId: depositoSelected,
           items: rows,
         },
       });
@@ -133,8 +163,26 @@ export function Quotes() {
       {notice && <div className="ok-banner">{notice}</div>}
 
       {showForm && (
-        <form className="form-form" onSubmit={submit}>
+        <form className="panel-form" onSubmit={submit}>
           <h3>Nuevo presupuesto</h3>
+          <div className="form-row">
+            <label>
+              Base
+              <select value={baseSelected} onChange={(e) => setBaseSelected(Number(e.target.value))}>
+                {bases.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Depósito
+              <select value={depositoSelected} onChange={(e) => setDepositoSelected(Number(e.target.value))}>
+                {depositos.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="form-row">
             <label>Cliente <input required value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} /></label>
             <label>WhatsApp <input value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} /></label>
@@ -170,13 +218,13 @@ export function Quotes() {
 
       <table>
         <thead>
-          <tr><th>Nro</th><th>Cliente</th><th>Estado</th><th>Total</th><th>Válido</th><th>Acciones</th></tr>
+          <tr><th>Nro</th><th>Cliente</th><th>Contexto</th><th>Estado</th><th>Total</th><th>Válido</th><th>Acciones</th></tr>
         </thead>
         <tbody>
           {quotes.map((q) => (
             <FragmentRow key={q.id} q={q} expanded={expanded === q.id} onToggle={() => setExpanded(expanded === q.id ? null : q.id)} onSend={send} onStatus={setStatus} onDel={del} />
           ))}
-          {quotes.length === 0 && <tr><td colSpan={6} className="empty">Sin presupuestos</td></tr>}
+          {quotes.length === 0 && <tr><td colSpan={7} className="empty">Sin presupuestos</td></tr>}
         </tbody>
       </table>
     </div>
@@ -196,6 +244,7 @@ function FragmentRow({ q, expanded, onToggle, onSend, onStatus, onDel }: {
       <tr onClick={onToggle} className="clickable">
         <td>{q.quote_number}</td>
         <td>{q.customer_name}</td>
+        <td className="muted">{q.context_label ?? '—'}</td>
         <td><span className={`pill pill-${q.status}`}>{q.status_label ?? q.status}</span></td>
         <td>{money(q.total)}</td>
         <td>{q.valid_days} días</td>
@@ -215,7 +264,7 @@ function FragmentRow({ q, expanded, onToggle, onSend, onStatus, onDel }: {
       </tr>
       {expanded && (
         <tr className="detail">
-          <td colSpan={6}>
+          <td colSpan={7}>
             <table className="inner">
               <thead><tr><th>Descripción</th><th>Cant.</th><th>P. unit.</th><th>Subtotal</th></tr></thead>
               <tbody>

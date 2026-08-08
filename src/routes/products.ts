@@ -2,7 +2,15 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { getDb } from '../db/db';
 import { HttpError, ah } from '../lib/http';
+import {
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getProduct,
+  productsForBase,
+} from '../services/productos';
 import { adjustStock } from '../services/stock';
+import { getDepositoIdsByPos } from '../services/pos';
 import {
   saveProductImage,
   removeProductImage,
@@ -16,35 +24,30 @@ const productSchema = z.object({
   code: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional().default(''),
-  price: z.coerce.number().min(0),
-  stock: z.coerce.number().int().min(0).optional().default(0),
-  min_stock: z.coerce.number().int().min(0).optional().default(5),
   image_base64: z.string().optional(),
 });
 
 const stockAdjustSchema = z.object({
+  depositoId: z.coerce.number().int().positive(),
   delta: z.coerce.number().int(),
   note: z.string().optional().default(''),
 });
 
-productsRouter.get('/', ah((_req, res) => {
-  const rows = getDb().prepare('SELECT * FROM products ORDER BY id DESC').all();
-  res.json(rows);
+productsRouter.get('/', ah((req, res) => {
+  const baseId = req.query.base ? Number(req.query.base) : 0;
+  const posId = req.query.pos ? Number(req.query.pos) : 0;
+  if (baseId > 0) {
+    res.json(productsForBase(baseId, posId > 0 ? getDepositoIdsByPos(posId) : []));
+    return;
+  }
+  res.json(getDb().prepare('SELECT * FROM products ORDER BY id DESC').all());
 }));
 
 productsRouter.post('/', ah((req, res) => {
   const data = productSchema.parse(req.body);
-  const db = getDb();
-  const exists = db.prepare('SELECT id FROM products WHERE code = ?').get(data.code);
-  if (exists) throw new HttpError(409, `Ya existe un producto con el código ${data.code}`);
-  const result = db
-    .prepare(
-      'INSERT INTO products (code, name, description, price, stock, min_stock) VALUES (?, ?, ?, ?, ?, ?)'
-    )
-    .run(data.code, data.name, data.description, data.price, data.stock, data.min_stock);
-  const id = Number(result.lastInsertRowid);
-  if (data.image_base64) saveProductImage(id, data.image_base64);
-  res.status(201).json(getDb().prepare('SELECT * FROM products WHERE id = ?').get(id));
+  const created = createProduct({ code: data.code, name: data.name, description: data.description });
+  if (data.image_base64) saveProductImage(created.id, data.image_base64);
+  res.status(201).json(getProduct(created.id));
 }));
 
 productsRouter.get('/:id/image', ah((req, res) => {
@@ -67,46 +70,33 @@ productsRouter.post('/:id/image', ah((req, res) => {
 }));
 
 productsRouter.delete('/:id/image', ah((req, res) => {
-  const id = Number(req.params.id);
-  removeProductImage(id);
+  removeProductImage(Number(req.params.id));
   res.status(204).send();
 }));
 
 productsRouter.put('/:id', ah((req, res) => {
   const id = Number(req.params.id);
   const data = productSchema.parse(req.body);
-  const result = getDb()
-    .prepare(
-      'UPDATE products SET code=?, name=?, description=?, price=?, min_stock=? WHERE id=?'
-    )
-    .run(data.code, data.name, data.description, data.price, data.min_stock, id);
-  if (result.changes === 0) throw new HttpError(404, 'Producto no encontrado');
+  updateProduct(id, { code: data.code, name: data.name, description: data.description });
   if (data.image_base64) saveProductImage(id, data.image_base64);
-  res.json(getDb().prepare('SELECT * FROM products WHERE id=?').get(id));
+  res.json(getProduct(id));
 }));
 
 productsRouter.patch('/:id/stock', ah((req, res) => {
   const id = Number(req.params.id);
-  const { delta, note } = stockAdjustSchema.parse(req.body);
-  const product = adjustStock(id, delta, note);
-  res.json(product);
+  const { depositoId, delta, note } = stockAdjustSchema.parse(req.body);
+  const next = adjustStock(id, depositoId, delta, note);
+  res.json({ ok: true, quantity: next });
 }));
 
 productsRouter.patch('/:id/active', ah((req, res) => {
   const id = Number(req.params.id);
   const active = z.boolean().parse(req.body.active);
-  const result = getDb().prepare('UPDATE products SET active=? WHERE id=?').run(active ? 1 : 0, id);
-  if (result.changes === 0) throw new HttpError(404, 'Producto no encontrado');
-  res.json(getDb().prepare('SELECT * FROM products WHERE id=?').get(id));
+  getDb().prepare('UPDATE products SET active=? WHERE id=?').run(active ? 1 : 0, id);
+  res.json(getProduct(id));
 }));
 
 productsRouter.delete('/:id', ah((req, res) => {
-  const id = Number(req.params.id);
-  const row = getDb().prepare('SELECT image FROM products WHERE id=?').get(id) as
-    | { image: string | null }
-    | undefined;
-  const result = getDb().prepare('DELETE FROM products WHERE id=?').run(id);
-  if (result.changes === 0) throw new HttpError(404, 'Producto no encontrado');
-  if (row?.image) unlinkImageFile(row.image);
+  deleteProduct(Number(req.params.id));
   res.status(204).send();
 }));

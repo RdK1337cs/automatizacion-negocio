@@ -1,6 +1,8 @@
 import 'dotenv/config';
 
 export const config = {
+  version: '1.0.0',
+  releaseLabel: 'Preview Beta',
   nodeEnv: envStr('NODE_ENV', 'development'),
   port: envNum('PORT', 4000),
   baseUrl: envStr('BASE_URL', 'http://localhost:4000'),

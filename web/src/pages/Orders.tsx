@@ -22,17 +22,30 @@ interface Order {
   notes: string;
   created_at: string;
   status_label?: string;
+  context_label?: string;
   items?: Item[];
+}
+interface Base {
+  id: number;
+  name: string;
+}
+interface Deposito {
+  id: number;
+  name: string;
 }
 interface Product {
   id: number;
   name: string;
   price: number;
-  stock: number;
+  stock_total: number;
 }
 
-export function Orders() {
+export function Orders({ pos }: { pos: number }) {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [bases, setBases] = useState<Base[]>([]);
+  const [depositos, setDepositos] = useState<Deposito[]>([]);
+  const [baseSelected, setBaseSelected] = useState(0);
+  const [depositoSelected, setDepositoSelected] = useState(0);
   const [products, setProducts] = useState<Product[]>([]);
   const [err, setErr] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -47,16 +60,30 @@ export function Orders() {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   const load = () =>
-    Promise.all([api<Order[]>('/api/orders'), api<Product[]>('/api/products')])
-      .then(([o, p]) => {
-        setOrders(o);
-        setProducts(p);
+    api<Order[]>(`/api/orders${pos ? `?pos=${pos}` : ''}`).then(setOrders).catch((e) => setErr((e as Error).message));
+
+  useEffect(() => {
+    Promise.all([api<Base[]>('/api/bases'), api<Deposito[]>('/api/depositos')])
+      .then(([b, d]) => {
+        setBases(b);
+        setDepositos(d);
+        setBaseSelected((prev) => prev || b[0]?.id || 0);
+        setDepositoSelected((prev) => prev || d[0]?.id || 0);
       })
       .catch((e) => setErr((e as Error).message));
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pos]);
+
+  useEffect(() => {
+    if (!baseSelected) return;
+    api<Product[]>(`/api/products?base=${baseSelected}${pos ? `&pos=${pos}` : ''}`)
+      .then(setProducts)
+      .catch(() => undefined);
+  }, [baseSelected, pos]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,11 +96,14 @@ export function Orders() {
           customerPhone: form.customerPhone,
           notes: form.notes,
           autoConfirm: form.autoConfirm,
+          posId: pos,
+          baseId: baseSelected,
+          depositoId: depositoSelected,
           items: form.rows.filter((r) => r.productId).map((r) => ({ productId: Number(r.productId), quantity: Number(r.quantity) })),
         },
       });
       setShowForm(false);
-      setForm({ customerName: '', customerEmail: '', customerPhone: '', notes: '', autoConfirm: false, rows: [{ productId: 0, quantity: 1 }] });
+      setForm({ ...form, rows: [{ productId: 0, quantity: 1 }] });
       await load();
     } catch (er) {
       setErr((er as Error).message);
@@ -104,6 +134,24 @@ export function Orders() {
         <form className="panel-form" onSubmit={submit}>
           <h3>Nuevo pedido</h3>
           <div className="form-row">
+            <label>
+              Base
+              <select value={baseSelected} onChange={(e) => setBaseSelected(Number(e.target.value))}>
+                {bases.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Depósito
+              <select value={depositoSelected} onChange={(e) => setDepositoSelected(Number(e.target.value))}>
+                {depositos.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <div className="form-row">
             <label>Cliente <input required value={form.customerName} onChange={(e) => setForm({ ...form, customerName: e.target.value })} /></label>
             <label>Email <input type="email" value={form.customerEmail} onChange={(e) => setForm({ ...form, customerEmail: e.target.value })} /></label>
             <label>WhatsApp <input value={form.customerPhone} onChange={(e) => setForm({ ...form, customerPhone: e.target.value })} /></label>
@@ -118,7 +166,7 @@ export function Orders() {
               >
                 <option value={0}>— Elegir producto —</option>
                 {products.map((p) => (
-                  <option key={p.id} value={p.id}>{p.name} (${p.price} · stock {p.stock})</option>
+                  <option key={p.id} value={p.id}>{p.name} ({money(p.price)} · stock {p.stock_total})</option>
                 ))}
               </select>
               <input
@@ -146,7 +194,7 @@ export function Orders() {
 
       <table>
         <thead>
-          <tr><th>Nro</th><th>Cliente</th><th>Origen</th><th>Estado</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr>
+          <tr><th>Nro</th><th>Cliente</th><th>Contexto</th><th>Estado</th><th>Total</th><th>Fecha</th><th>Acciones</th></tr>
         </thead>
         <tbody>
           {orders.map((o) => (
@@ -165,7 +213,7 @@ function FragmentRow({ o, expanded, onToggle, onAction }: { o: Order; expanded: 
       <tr onClick={onToggle} className="clickable">
         <td>{o.order_number}</td>
         <td>{o.customer_name}</td>
-        <td>{o.source}</td>
+        <td className="muted">{o.context_label ?? '—'}</td>
         <td><span className={`pill pill-${o.status}`}>{o.status_label ?? o.status}</span></td>
         <td>{money(o.total)}</td>
         <td>{fmtDate(o.created_at)}</td>

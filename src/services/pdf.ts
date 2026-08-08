@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import { getSetting } from './settings';
+import { nameOf } from './labels';
 import type { Quote, QuoteItem } from '../types';
 
 export async function buildQuotePdf(quote: Quote, items: QuoteItem[]): Promise<Buffer> {

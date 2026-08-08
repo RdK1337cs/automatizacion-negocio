@@ -8,6 +8,7 @@ import {
   changePassword,
   deleteUser,
   ROLES,
+  assignUserPositions,
 } from '../services/user';
 
 export const usersRouter = Router();
@@ -18,11 +19,13 @@ const createSchema = z.object({
   username: z.string().min(3),
   password: z.string().min(4),
   role: roleSchema.default('operador'),
+  posIds: z.array(z.number().int().positive()).optional().default([]),
 });
 
 const updateSchema = z.object({
   role: roleSchema.optional(),
   active: z.boolean().optional(),
+  posIds: z.array(z.number().int().positive()).optional(),
 });
 
 usersRouter.get('/', ah((_req, res) => {
@@ -31,7 +34,9 @@ usersRouter.get('/', ah((_req, res) => {
 
 usersRouter.post('/', ah((req, res) => {
   const data = createSchema.parse(req.body);
-  res.status(201).json(createUser(data));
+  const created = createUser(data);
+  assignUserPositions(created.id, data.posIds);
+  res.status(201).json(listUsers().find((u) => u.id === created.id));
 }));
 
 usersRouter.put('/:id', ah((req, res) => {
@@ -40,7 +45,9 @@ usersRouter.put('/:id', ah((req, res) => {
     throw new HttpError(400, 'No podés modificar tu propio usuario desde aquí');
   }
   const data = updateSchema.parse(req.body);
-  res.json(updateUser(id, data));
+  const updated = updateUser(id, data);
+  if (data.posIds) assignUserPositions(id, data.posIds);
+  res.json(listUsers().find((u) => u.id === updated.id));
 }));
 
 usersRouter.patch('/:id/password', ah((req, res) => {

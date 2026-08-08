@@ -1,19 +1,34 @@
 import { getSetting } from './settings';
-import { listActiveProducts } from './stock';
-import { sendText, findProductByText, logIn } from './whatsapp';
-import { createOrder, catalogText } from './order';
-import { createQuote, sendQuote } from './quote';
+import { sendText, logIn } from './whatsapp';
+import { findProductByText } from './productos';
+import { createOrder } from './order';
+import { createQuote, sendQuote, quoteCatalog } from './quote';
 import { money } from '../lib/format';
-import type { Product } from '../types';
+import type { ProductView } from '../types';
 
 type Intent = 'saludo' | 'menu' | 'catalogo' | 'precio' | 'stock' | 'pedido' | 'presupuesto' | 'otros';
 
-const GREET = /^(hola|buen(as|os)?(\s*\\s(dia|d[ií]a|tardes|noches))?|hey|hi|hello)\b/i;
+const GREET = /^(hola|buen(as|os)?(\s*(dia|d[ií]a|tardes|noches))?|hey|hi|hello)\b/i;
 
-export async function handleIncoming(from: string, body: string): Promise<void> {
+export interface BotContext {
+  posId: number;
+  baseId: number;
+  depositoId: number;
+}
+
+function ctxFromSettings(): BotContext {
+  return {
+    posId: Number(getSetting('whatsapp_default_pos') || 1),
+    baseId: Number(getSetting('whatsapp_default_base') || 1),
+    depositoId: Number(getSetting('whatsapp_default_deposito') || 1),
+  };
+}
+
+export async function handleIncoming(from: string, body: string, ctx?: Partial<BotContext>): Promise<void> {
   const text = `${body}`.trim();
   const currency = getSetting('currency') || 'ARS';
-  const products = listActiveProducts();
+  const context: BotContext = { ...ctxFromSettings(), ...ctx };
+  const products = quoteCatalog(context.baseId, context.depositoId);
   const product = findProductByText(text, products);
   const quantity = extractQuantity(text);
   const intent = detectIntent(text);
@@ -31,12 +46,12 @@ export async function handleIncoming(from: string, body: string): Promise<void> 
       return;
     }
     case 'catalogo': {
-      await sendText(from, `Este es nuestro catálogo:\n\n${catalogText()}`);
+      await sendText(from, `Este es nuestro catálogo:\n\n${catalogText(products)}`);
       return;
     }
     case 'precio': {
       if (!product) {
-        await sendText(from, '¿Sobre qué producto querés saber el precio? Te paso el catálogo:\n\n' + catalogText());
+        await sendText(from, '¿Sobre qué producto querés saber el precio? Te paso el catálogo:\n\n' + catalogText(products));
         return;
       }
       await sendText(
@@ -47,24 +62,24 @@ export async function handleIncoming(from: string, body: string): Promise<void> 
     }
     case 'stock': {
       if (!product) {
-        await sendText(from, '¿Qué producto querés consultar? Te paso el catálogo:\n\n' + catalogText());
+        await sendText(from, '¿Qué producto querés consultar? Te paso el catálogo:\n\n' + catalogText(products));
         return;
       }
-      const low = product.stock <= product.min_stock;
+      const low = product.stock_total <= product.min_stock;
       await sendText(
         from,
         low
-          ? `Nos queda poco stock de ${product.name}: ${product.stock} unidades. ¿Te paso precio o un presupuesto?`
-          : `Tenemos ${product.stock} unidades disponibles de ${product.name}.`
+          ? `Nos queda poco stock de ${product.name}: ${product.stock_total} unidades. ¿Te paso precio o un presupuesto?`
+          : `Tenemos ${product.stock_total} unidades disponibles de ${product.name}.`
       );
       return;
     }
     case 'pedido': {
-      await handleOrder(from, text, product, quantity);
+      await handleOrder(from, text, product, quantity, context);
       return;
     }
     case 'presupuesto': {
-      await handleQuote(from, product, quantity);
+      await handleQuote(from, product, quantity, context);
       return;
     }
     default: {
@@ -98,17 +113,25 @@ function extractQuantity(text: string): number {
   return n > 0 && n < 10000 ? n : 1;
 }
 
-async function handleQuote(from: string, product: Product | null, quantity: number): Promise<void> {
+async function handleQuote(
+  from: string,
+  product: ProductView | null,
+  quantity: number,
+  context: BotContext
+): Promise<void> {
   const currency = getSetting('currency') || 'ARS';
   const business = getSetting('business_name') || 'Mi Negocio';
   if (!product) {
-    await sendText(from, 'Para armar el presupuesto necesito saber el producto. Te dejo el catálogo:\n\n' + catalogText());
+    await sendText(from, 'Para armar el presupuesto necesito saber el producto. Te dejo el catálogo:\n\n' + catalogText(quoteCatalog(context.baseId, context.depositoId)));
     return;
   }
   const quote = createQuote({
     customerName: `WhatsApp ${from}`,
     customerPhone: from,
     source: 'whatsapp',
+    posId: context.posId,
+    baseId: context.baseId,
+    depositoId: context.depositoId,
     items: [{ productId: product.id, quantity, description: product.name }],
   });
   await sendQuote(quote.id, 'whatsapp');
@@ -118,27 +141,36 @@ async function handleQuote(from: string, product: Product | null, quantity: numb
   );
 }
 
-async function handleOrder(from: string, text: string, product: Product | null, quantity: number): Promise<void> {
+async function handleOrder(
+  from: string,
+  text: string,
+  product: ProductView | null,
+  quantity: number,
+  context: BotContext
+): Promise<void> {
   const currency = getSetting('currency') || 'ARS';
   if (!product) {
-    await sendText(from, '¿Qué producto necesitás? Te dejo el catálogo:\n\n' + catalogText());
+    await sendText(from, '¿Qué producto necesitás? Te dejo el catálogo:\n\n' + catalogText(quoteCatalog(context.baseId, context.depositoId)));
     return;
   }
-  if (product.stock <= 0) {
+  if (product.stock_total <= 0) {
     await sendText(from, `Lo sentimos, ${product.name} está sin stock por ahora. ¿Querés que te avisemos cuando llegue o te armamos un presupuesto para más adelante?`);
     return;
   }
-  const q = Math.min(quantity, product.stock);
+  const q = Math.min(quantity, product.stock_total);
   try {
     const order = createOrder({
       customerName: `WhatsApp ${from}`,
       customerPhone: from,
       source: 'whatsapp',
+      posId: context.posId,
+      baseId: context.baseId,
+      depositoId: context.depositoId,
       items: [{ productId: product.id, quantity: q }],
       autoConfirm: true,
     });
     const pedidoParcial = q < quantity;
-    const low = product.stock - q < product.min_stock;
+    const low = product.stock_total - q <= product.min_stock;
     await sendText(
       from,
       `📦 Pedido ${order.order_number} confirmado\nProducto: ${product.name}\nCantidad: ${q}\nTotal: ${money(order.total, currency)}\n\n` +
@@ -160,4 +192,11 @@ function greeting(): string {
 
 function menu(): string {
   return getSetting('whatsapp_menu') || 'Menú disponible.';
+}
+
+function catalogText(products: ProductView[]): string {
+  if (products.length === 0) return 'Todavía no cargamos nuestro catálogo.';
+  return products
+    .map((p) => `• ${p.name} (${p.code}): ${money(p.price, getSetting('currency') || 'ARS')} - Stock: ${p.stock_total} uni.`)
+    .join('\n');
 }

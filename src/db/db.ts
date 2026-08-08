@@ -30,13 +30,78 @@ export function applySchema(database: Database): void {
   migrate(database);
 }
 
-function migrate(database: Database): void {
-  const cols = database.prepare('PRAGMA table_info(products)').all() as unknown as Array<{
+function hasColumn(database: Database, table: string, column: string): boolean {
+  const cols = database.prepare(`PRAGMA table_info(${table})`).all() as unknown as Array<{
     name: string;
   }>;
-  if (!cols.some((c) => c.name === 'image')) {
-    database.exec('ALTER TABLE products ADD COLUMN image TEXT');
+  return cols.some((c) => c.name === column);
+}
+
+function tableExists(database: Database, name: string): boolean {
+  return Boolean(
+    database
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
+      .get(name)
+  );
+}
+
+function migrate(database: Database): void {
+  for (const t of ['orders', 'quotes']) {
+    if (tableExists(database, t)) {
+      if (!hasColumn(database, t, 'pos_id')) database.exec(`ALTER TABLE ${t} ADD COLUMN pos_id INTEGER`);
+      if (!hasColumn(database, t, 'base_id')) database.exec(`ALTER TABLE ${t} ADD COLUMN base_id INTEGER`);
+      if (!hasColumn(database, t, 'deposito_id')) database.exec(`ALTER TABLE ${t} ADD COLUMN deposito_id INTEGER`);
+    }
   }
+  database.exec('CREATE INDEX IF NOT EXISTS idx_orders_pos ON orders(pos_id)');
+  database.exec('CREATE INDEX IF NOT EXISTS idx_quotes_pos ON quotes(pos_id)');
+  if (tableExists(database, 'stock_movements') && !hasColumn(database, 'stock_movements', 'deposito_id')) {
+    database.exec('ALTER TABLE stock_movements ADD COLUMN deposito_id INTEGER REFERENCES depositos(id)');
+  }
+  database.exec('CREATE INDEX IF NOT EXISTS idx_movements_deposito ON stock_movements(deposito_id)');
+
+  // Datos de la v1.0.0: cada producto queda con un registro por defecto
+  // en la base 1 ("General") con su precio, y stock en el depósito 1.
+  const baseId = seedRow(database, 'bases', 'name', 'General');
+  const depId = seedRow(database, 'depositos', 'name', 'Depósito Principal');
+  const posId = seedRow(database, 'puntos_venta', 'name', 'POS Principal');
+  database
+    .prepare('INSERT OR IGNORE INTO pos_depositos (pos_id, deposito_id) VALUES (?, ?)')
+    .run(posId, depId);
+
+  const legacyPrice = tableExists(database, 'products') && hasColumn(database, 'products', 'price');
+  const legacyStock = tableExists(database, 'products') && hasColumn(database, 'products', 'stock');
+  if (legacyPrice) {
+    database
+      .prepare(
+        'INSERT OR IGNORE INTO product_bases (product_id, base_id, price, min_stock) SELECT id, ?, price, min_stock FROM products'
+      )
+      .run(baseId);
+  } else {
+    database
+      .prepare('INSERT OR IGNORE INTO product_bases (product_id, base_id, price, min_stock) SELECT id, ?, 0, 5 FROM products')
+      .run(baseId);
+  }
+  if (legacyStock) {
+    database
+      .prepare(
+        'INSERT OR IGNORE INTO product_stock (product_id, deposito_id, quantity) SELECT id, ?, stock FROM products'
+      )
+      .run(depId);
+  } else {
+    database
+      .prepare('INSERT OR IGNORE INTO product_stock (product_id, deposito_id, quantity) SELECT id, ?, 0 FROM products')
+      .run(depId);
+  }
+}
+
+function seedRow(database: Database, table: string, col: string, name: string): number {
+  const existing = database.prepare(`SELECT id FROM ${table} ORDER BY id ASC LIMIT 1`).get() as
+    | { id: number }
+    | undefined;
+  if (existing) return existing.id;
+  const res = database.prepare(`INSERT INTO ${table} (${col}) VALUES (?)`).run(name);
+  return Number(res.lastInsertRowid);
 }
 
 function applyDefaults(database: Database): void {
@@ -48,6 +113,9 @@ function applyDefaults(database: Database): void {
     low_stock_threshold: '5',
     quote_validity_days: '7',
     email_notify_low_stock: '1',
+    whatsapp_default_pos: '1',
+    whatsapp_default_base: '1',
+    whatsapp_default_deposito: '1',
     whatsapp_greeting:
       '¡Hola! Bienvenido a {business}. Puedo ayudarte con precios, stock y pedidos.',
     whatsapp_menu:

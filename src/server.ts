@@ -13,6 +13,9 @@ import {
 import { errorHandler, notFoundHandler } from './lib/http';
 import { authRouter } from './routes/auth';
 import { usersRouter } from './routes/users';
+import { posRouter } from './routes/pos';
+import { basesRouter } from './routes/bases';
+import { depositosRouter } from './routes/depositos';
 import { whatsappRouter } from './routes/whatsapp';
 import { productsRouter } from './routes/products';
 import { ordersRouter } from './routes/orders';
@@ -50,6 +53,9 @@ app.use('/api/products', authRequired, mutatingWriteRequired(), productsRouter);
 app.use('/api/orders', authRequired, mutatingWriteRequired(), ordersRouter);
 app.use('/api/quotes', authRequired, mutatingWriteRequired(), quotesRouter);
 app.use('/api/settings', authRequired, mutatingAdminRequired(), settingsRouter);
+app.use('/api/pos', authRequired, mutatingAdminRequired(), posRouter);
+app.use('/api/bases', authRequired, mutatingAdminRequired(), basesRouter);
+app.use('/api/depositos', authRequired, mutatingAdminRequired(), depositosRouter);
 app.use('/api/dashboard', authRequired, dashboardRouter);
 app.use('/api/logs', authRequired, logsRouter);
 
