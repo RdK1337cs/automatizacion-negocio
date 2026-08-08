@@ -97,6 +97,12 @@ export function PosPage() {
     }
   };
 
+  const rename = async (p: PosDetails) => {
+    const name = prompt('Nuevo nombre:', p.name);
+    if (!name) return;
+    await update(p, { name });
+  };
+
   return (
     <div>
       <div className="head">
@@ -151,11 +157,11 @@ export function PosPage() {
                     <label key={d.id} className="check">
                       <input
                         type="checkbox"
-                        checked={p.depositos.some((x) => x.id === d.id)}
+                        checked={p.depositos!.some((x) => x.id === d.id)}
                         onChange={(e) => {
                           const next = e.target.checked
-                            ? [...p.depositos.map((x) => x.id), d.id]
-                            : p.depositos.map((x) => x.id).filter((x) => x !== d.id);
+                            ? [...p.depositos!.map((x) => x.id), d.id]
+                            : p.depositos!.map((x) => x.id).filter((x) => x !== d.id);
                           setDepos(p.id, next);
                         }}
                       />
@@ -170,14 +176,13 @@ export function PosPage() {
                     <label key={u.id} className="check">
                       <input
                         type="checkbox"
-                        checked={p.users.some((x) => x.id === u.id && x.role === 'operador')}
+                        checked={p.users!.some((x) => x.id === u.id && x.role === 'operador')}
                         onChange={(e) => {
-                          const has = p.users.some((x) => x.id === u.id && x.role === 'operador');
-                          const assignments = p.users
+                          const assignments = p.users!
                             .filter((x) => x.id !== u.id)
                             .map((x) => ({ userId: x.id, role: x.role as 'operador' | 'lector' }));
                           if (e.target.checked) assignments.push({ userId: u.id, role: 'operador' });
-                          setUserForPos(p.id, assignments);
+                          setUsersForPos(p.id, assignments);
                         }}
                       />
                       {u.username}
@@ -186,7 +191,7 @@ export function PosPage() {
                 </div>
               </td>
               <td className="actions">
-                <button onClick={() => updateName(p)}>Renombrar</button>
+                <button onClick={() => rename(p)}>Renombrar</button>
                 <button className="danger" onClick={() => del(p)}>×</button>
               </td>
             </tr>
@@ -195,14 +200,4 @@ export function PosPage() {
       </table>
     </div>
   );
-}
-
-async function setUserForPos(id: number, assignments: Array<{ userId: number; role: 'operador' | 'lector' }>): Promise<void> {
-  await api(`/api/pos/${id}/users`, { method: 'POST', body: { assignments } });
-}
-
-function updateName(p: { id: number; name: string }): void {
-  const name = prompt('Nuevo nombre:', p.name);
-  if (!name) return;
-  void api(`/api/pos/${p.id}`, { method: 'PUT', body: { name } });
 }

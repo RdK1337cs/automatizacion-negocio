@@ -140,16 +140,24 @@ export interface PosDetails extends PuntoVenta {
 export function puntoVentaWithDetails(id: number): PosDetails | null {
   const row = getDb().prepare('SELECT * FROM puntos_venta WHERE id = ?').get(id) as PuntoVenta | undefined;
   if (!row) return null;
+  return withDetails(row);
+}
+
+export function listPuntosVentaWithDetails(): PosDetails[] {
+  return listPuntosVenta().map((p) => withDetails(p));
+}
+
+function withDetails(row: PuntoVenta): PosDetails {
   const db = getDb();
   const depositos = db
     .prepare(
       `SELECT d.* FROM depositos d JOIN pos_depositos pd ON pd.deposito_id = d.id WHERE pd.pos_id = ? ORDER BY d.name`
     )
-    .all(id) as Deposito[];
+    .all(row.id) as Deposito[];
   const users = db
     .prepare(
       `SELECT u.id, u.username, up.role FROM user_pos up JOIN users u ON u.id = up.user_id WHERE up.pos_id = ? ORDER BY u.username`
     )
-    .all(id) as Array<{ id: number; username: string; role: PerPosRole }>;
+    .all(row.id) as Array<{ id: number; username: string; role: PerPosRole }>;
   return { ...row, depositos, users };
 }

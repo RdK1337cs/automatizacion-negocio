@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { HttpError, ah } from '../lib/http';
 import {
   listPuntosVenta,
+  listPuntosVentaWithDetails,
   createPuntoVenta,
   updatePuntoVenta,
   deletePuntoVenta,
@@ -21,7 +22,7 @@ const posSchema = z.object({
 });
 
 posRouter.get('/', ah((_req, res) => {
-  res.json(listPuntosVenta());
+  res.json(listPuntosVentaWithDetails());
 }));
 
 posRouter.get('/mine', ah((req, res) => {
