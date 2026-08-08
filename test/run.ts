@@ -187,6 +187,63 @@ async function main() {
     void getDeposito;
   });
 
+  await ok('2FA: admin con doble verificación, código visible en mensajes simulados', async () => {
+    const { setSetting } = await import('../src/services/settings');
+    const { beginLogin, verifyTwoFactorLogin } = await import('../src/middleware/auth');
+    const config = await import('../src/config');
+
+    setSetting('security_admin_2fa', '1');
+    setSetting('security_2fa_phone', '5491199999999');
+
+    const pending = beginLogin(config.config.adminUser, config.config.adminPassword);
+    assert.ok(pending && 'pending2fa' in pending && pending.pending2fa, 'debe quedar pendiente de 2FA');
+    assert.ok(pending.token, 'debe entregar un token pendiente');
+    assert.equal(pending.phone, '5491199999999');
+
+const sent = db
+      .prepare("SELECT body FROM messages WHERE direction='out' ORDER BY id DESC LIMIT 1")
+      .get() as { body: string } | undefined;
+    assert.ok(sent, 'debe existir el mensaje simulado');
+    const m = /código de verificación: (\d{6})/i.exec(sent!.body);
+    assert.ok(m, 'el mensaje debe contener el código de 6 dígitos');
+    const code = m![1];
+
+    const expired = 'not-a-valid-token';
+    assert.throws(
+      () => verifyTwoFactorLogin(expired, code),
+      (e) => /expir|inválid/.test((e as Error).message)
+    );
+
+    assert.throws(
+      () => verifyTwoFactorLogin(pending.token, '000000'),
+      /Código incorrecto/
+    );
+
+    const done = verifyTwoFactorLogin(pending.token, code);
+    assert.ok(done.token.length > 20);
+    assert.equal(done.role, 'admin');
+
+    assert.throws(
+      () => verifyTwoFactorLogin(pending.token, code),
+      /ya fue utilizado/
+    );
+
+    const second = beginLogin(config.config.adminUser, config.config.adminPassword);
+    assert.ok(second && 'pending2fa' in second, 'sigue pendiente mientras 2FA esté activo');
+    const sent2 = db
+      .prepare("SELECT body FROM messages WHERE direction='out' ORDER BY id DESC LIMIT 1")
+      .get() as { body: string };
+    const m2 = /código de verificación: (\d{6})/i.exec(sent2.body);
+    assert.ok(m2, 'segundo login debe generar un nuevo código');
+    assert.notEqual(m2![1], code, 'cada login genera un código distinto');
+    const done2 = verifyTwoFactorLogin(second.token, m2![1]);
+    assert.equal(done2.role, 'admin');
+
+    setSetting('security_admin_2fa', '0');
+    const no2fa = beginLogin(config.config.adminUser, config.config.adminPassword);
+    assert.ok(no2fa && !('pending2fa' in no2fa), 'con 2FA apagado el login es directo');
+  });
+
   console.log('\nResultado:');
   console.log(failures.length === 0 ? '  TODOS LOS TESTS PASARON' : `  ${failures.length} test(s) fallaron`);
   process.exit(failures.length ? 1 : 0);

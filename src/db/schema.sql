@@ -175,6 +175,17 @@ CREATE TABLE IF NOT EXISTS emails (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- Códigos de verificación en dos pasos (2FA por celular, modo prueba)
+CREATE TABLE IF NOT EXISTS auth_codes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  used INTEGER NOT NULL DEFAULT 0,
+  expires_at TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_products_active ON products(active);
 CREATE INDEX IF NOT EXISTS idx_product_bases_base ON product_bases(base_id);
 CREATE INDEX IF NOT EXISTS idx_product_stock_deposito ON product_stock(deposito_id);

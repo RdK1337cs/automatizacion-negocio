@@ -9,6 +9,8 @@ const FIELDS: Array<{ key: string; label: string; textarea?: boolean }> = [
   { key: 'low_stock_threshold', label: 'Umbral alerta de stock bajo' },
   { key: 'quote_validity_days', label: 'Validez de presupuestos (días)' },
   { key: 'email_notify_low_stock', label: 'Email para alertas de stock (vacío = desactivado)' },
+  { key: 'security_admin_2fa', label: 'Verificación en dos pasos para administradores (1 = activado)' },
+  { key: 'security_2fa_phone', label: 'Celular para código de verificación (2FA)' },
   { key: 'whatsapp_greeting', label: 'Saludo de WhatsApp ({business} = nombre)', textarea: true },
   { key: 'whatsapp_menu', label: 'Menú de opciones de WhatsApp', textarea: true },
 ];
