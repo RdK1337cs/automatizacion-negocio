@@ -29,7 +29,7 @@ function PosSelector({ pos, onPick }: { pos: string; onPick: (id: string) => voi
   if (options.length === 0) return null;
   return (
     <div className="pos-selector">
-      <label>POS: </label>
+      <label>Punto de venta: </label>
       <select value={pos} onChange={(e) => onPick(e.target.value)}>
         {options.map((p) => (
           <option key={p.id} value={p.id}>

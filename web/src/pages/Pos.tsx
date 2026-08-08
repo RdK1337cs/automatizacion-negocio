@@ -134,7 +134,7 @@ export function PosPage() {
 
       <table>
         <thead>
-          <tr><th>POS</th><th>Depósitos asignados</th><th>Usuarios con acceso</th><th>Acciones</th></tr>
+          <tr><th>Punto de venta</th><th>Depósitos asignados</th><th>Usuarios con acceso</th><th>Acciones</th></tr>
         </thead>
         <tbody>
           {posList.map((p) => (
