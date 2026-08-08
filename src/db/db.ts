@@ -113,6 +113,7 @@ function applyDefaults(database: Database): void {
     low_stock_threshold: '5',
     quote_validity_days: '7',
     email_notify_low_stock: '1',
+    business_logo: '',
     security_admin_2fa: '0',
     security_2fa_phone: '',
     whatsapp_default_pos: '1',

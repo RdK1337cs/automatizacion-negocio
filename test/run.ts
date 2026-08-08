@@ -244,6 +244,20 @@ const sent = db
     assert.ok(no2fa && !('pending2fa' in no2fa), 'con 2FA apagado el login es directo');
   });
 
+  await ok('Logo: guarda, lee y elimina el logo de la empresa', async () => {
+    const { uploadBusinessLogo, removeBusinessLogo, businessLogoInfo } = await import('../src/services/businessLogo');
+    const png =
+      'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    uploadBusinessLogo(png);
+    const info = businessLogoInfo();
+    assert.ok(info, 'debe existir el logo');
+    assert.equal(info!.mime, 'image/png');
+    assert.ok(fs.existsSync(info!.filePath));
+    assert.throws(() => uploadBusinessLogo('data:text/plain;base64,AA=='), /Formato de logo/);
+    removeBusinessLogo();
+    assert.equal(businessLogoInfo(), null, 'tras quitar no debe existir');
+  });
+
   console.log('\nResultado:');
   console.log(failures.length === 0 ? '  TODOS LOS TESTS PASARON' : `  ${failures.length} test(s) fallaron`);
   process.exit(failures.length ? 1 : 0);

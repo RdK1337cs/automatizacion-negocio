@@ -12,6 +12,7 @@ import { Users } from './pages/Users';
 import { PosPage } from './pages/Pos';
 import { BasesPage } from './pages/Bases';
 import { DepositosPage } from './pages/Depositos';
+import { CompanyLogo } from './components/CompanyLogo';
 
 interface Pos {
   id: number;
@@ -65,7 +66,7 @@ function Sidebar({ pos, onPickPos }: { pos: string; onPickPos: (id: string) => v
   };
   return (
     <aside className="sidebar">
-      <div className="logo">⚡ Negocio</div>
+      <CompanyLogo className="logo" />
       <PosSelector pos={pos} onPick={onPickPos} />
       <nav>
         {links.map((l) => (

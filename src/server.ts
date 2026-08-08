@@ -23,6 +23,7 @@ import { quotesRouter } from './routes/quotes';
 import { settingsRouter } from './routes/settings';
 import { dashboardRouter } from './routes/dashboard';
 import { logsRouter } from './routes/logs';
+import { logoRouter } from './routes/logo';
 import { sendEnabled } from './services/whatsapp';
 import { emailEnabled } from './services/email';
 
@@ -58,6 +59,7 @@ app.use('/api/bases', authRequired, mutatingAdminRequired(), basesRouter);
 app.use('/api/depositos', authRequired, mutatingAdminRequired(), depositosRouter);
 app.use('/api/dashboard', authRequired, dashboardRouter);
 app.use('/api/logs', authRequired, logsRouter);
+app.use('/api/logo', logoRouter);
 
 // 404 para llamadas API desconocidas
 app.use('/api', notFoundHandler);

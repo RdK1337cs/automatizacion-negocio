@@ -19,9 +19,18 @@ export function Settings() {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoErr, setLogoErr] = useState('');
+
+  const refreshLogo = () => {
+    setLogoUrl(`/api/logo?v=${Date.now()}`);
+    window.dispatchEvent(new Event('logochange'));
+  };
 
   useEffect(() => {
     api<Record<string, string>>('/api/settings').then(setValues).catch((e) => setErr((e as Error).message));
+    refreshLogo();
   }, []);
 
   const save = async (e: React.FormEvent) => {
@@ -31,8 +40,38 @@ export function Settings() {
     try {
       await api('/api/settings', { method: 'PUT', body: values });
       setSaved(true);
+      refreshLogo();
     } catch (er) {
       setErr((er as Error).message);
+    }
+  };
+
+  const uploadLogo = async (file: File) => {
+    setLogoErr('');
+    setLogoBusy(true);
+    try {
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+      });
+      await api('/api/logo', { body: { imageBase64: dataUrl } });
+      refreshLogo();
+    } catch (er) {
+      setLogoErr((er as Error).message);
+    } finally {
+      setLogoBusy(false);
+    }
+  };
+
+  const removeLogo = async () => {
+    if (!confirm('¿Quitar el logo de la empresa?')) return;
+    setLogoErr('');
+    try {
+      await api('/api/logo', { method: 'DELETE' });
+      refreshLogo();
+    } catch (er) {
+      setLogoErr((er as Error).message);
     }
   };
 
@@ -63,6 +102,32 @@ export function Settings() {
           <button className="primary" type="submit">Guardar</button>
         </div>
       </form>
+
+      <section className="logo-section">
+        <h2>Logo de la empresa</h2>
+        <p className="muted">
+          Se muestra en la pantalla de inicio de sesión y en el panel de control (barra lateral).
+        </p>
+        {logoErr && <div className="error">{logoErr}</div>}
+        <div className="logo-editor">
+          <img className="logo-preview" src={logoUrl} alt="Logo de la empresa"
+            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            onLoad={(e) => { (e.target as HTMLImageElement).style.display = ''; }}
+          />
+          <div className="form-actions">
+            <label className="primary file-upload">
+              {logoBusy ? 'Subiendo…' : 'Subir logo'}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                disabled={logoBusy}
+                onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])}
+              />
+            </label>
+            <button className="danger" type="button" onClick={removeLogo}>Quitar logo</button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }
