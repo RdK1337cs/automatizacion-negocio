@@ -18,7 +18,8 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .app { display: flex; min-height: 100vh; }
 
 .sidebar {
-  width: 230px; background: #161b2e; color: #fff; padding: 20px 12px;
+  flex: 0 0 230px; min-width: 230px;
+  background: #161b2e; color: #fff; padding: 20px 12px;
   display: flex; flex-direction: column; gap: 16px; position: sticky; top: 0; height: 100vh;
 }
 .sidebar .logo { font-size: 18px; font-weight: 700; padding: 4px 8px; }
@@ -30,7 +31,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .sidebar nav a.active { background: var(--primary); color: #fff; }
 .sidebar .logout { margin-top: auto; background: none; border: 1px solid #3a4166; color: #c6cbe0; padding: 8px; border-radius: 8px; cursor: pointer; }
 
-.content { flex: 1; padding: 28px 32px; max-width: 1200px; }
+.content { flex: 1; min-width: 0; padding: 28px 32px; max-width: 1200px; }
 
 h1 { font-size: 24px; margin-bottom: 20px; }
 h2 { font-size: 17px; margin-bottom: 12px; }
