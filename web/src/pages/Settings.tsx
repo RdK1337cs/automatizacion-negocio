@@ -22,6 +22,7 @@ export function Settings() {
   const [logoUrl, setLogoUrl] = useState('');
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoErr, setLogoErr] = useState('');
+  const [logoSaved, setLogoSaved] = useState(false);
 
   const refreshLogo = () => {
     setLogoUrl(`/api/logo?v=${Date.now()}`);
@@ -48,17 +49,22 @@ export function Settings() {
 
   const uploadLogo = async (file: File) => {
     setLogoErr('');
+    setLogoSaved(false);
     setLogoBusy(true);
     try {
       const reader = new FileReader();
       const dataUrl = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(String(reader.result));
         reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+        reader.readAsDataURL(file);
       });
+      setLogoUrl(dataUrl);
       await api('/api/logo', { body: { imageBase64: dataUrl } });
       refreshLogo();
+      setLogoSaved(true);
     } catch (er) {
       setLogoErr((er as Error).message);
+      refreshLogo();
     } finally {
       setLogoBusy(false);
     }
@@ -109,6 +115,7 @@ export function Settings() {
           Se muestra en la pantalla de inicio de sesión y en el panel de control (barra lateral).
         </p>
         {logoErr && <div className="error">{logoErr}</div>}
+        {logoSaved && <div className="ok-banner">Logo actualizado.</div>}
         <div className="logo-editor">
           <img className="logo-preview" src={logoUrl} alt="Logo de la empresa"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
@@ -121,7 +128,10 @@ export function Settings() {
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/svg+xml"
                 disabled={logoBusy}
-                onChange={(e) => e.target.files?.[0] && uploadLogo(e.target.files[0])}
+                onChange={(e) => {
+                  if (e.target.files?.[0]) uploadLogo(e.target.files[0]);
+                  e.target.value = '';
+                }}
               />
             </label>
             <button className="danger" type="button" onClick={removeLogo}>Quitar logo</button>
