@@ -46,10 +46,10 @@ function tableExists(database: Database, name: string): boolean {
 }
 
 function migrate(database: Database): void {
-  const userCols = ['last_ip', 'dni', 'email', 'phone', 'email_verified', 'phone_verified'] as const;
+  const userCols = ['last_ip', 'dni', 'email', 'phone', 'email_verified', 'phone_verified', 'must_change_password'] as const;
   for (const col of userCols) {
     if (tableExists(database, 'users') && !hasColumn(database, 'users', col)) {
-      const def = col === 'email_verified' || col === 'phone_verified' ? "INTEGER NOT NULL DEFAULT 0" : "TEXT NOT NULL DEFAULT ''";
+      const def = col.endsWith('_verified') || col === 'must_change_password' ? 'INTEGER NOT NULL DEFAULT 0' : "TEXT NOT NULL DEFAULT ''";
       database.exec(`ALTER TABLE users ADD COLUMN ${col} ${def}`);
     }
   }

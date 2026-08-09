@@ -19,6 +19,7 @@ export interface UserRow {
   phone: string;
   email_verified: number;
   phone_verified: number;
+  must_change_password: number;
 }
 
 export type PublicUser = Omit<UserRow, 'password_hash'> & { pos_ids: number[] };
@@ -54,7 +55,7 @@ export function listUsers(): PublicUser[] {
   return (
     getDb()
       .prepare(
-        'SELECT id, username, role, active, created_at, last_login, last_ip, dni, email, phone, email_verified, phone_verified FROM users ORDER BY id ASC'
+        'SELECT id, username, role, active, created_at, last_login, last_ip, dni, email, phone, email_verified, phone_verified, must_change_password FROM users ORDER BY id ASC'
       )
       .all() as unknown as Array<Omit<PublicUser, 'pos_ids'>>
   ).map((u) => ({ ...u, pos_ids: getUserPosIds(u.id) }));
@@ -63,7 +64,7 @@ export function listUsers(): PublicUser[] {
 export function getUserById(id: number): PublicUser | null {
   const row = getDb()
     .prepare(
-      'SELECT id, username, role, active, created_at, last_login, last_ip, dni, email, phone, email_verified, phone_verified FROM users WHERE id = ?'
+      'SELECT id, username, role, active, created_at, last_login, last_ip, dni, email, phone, email_verified, phone_verified, must_change_password FROM users WHERE id = ?'
     )
     .get(id) as UserRow | undefined;
   return row ? toPublicFields(row) : null;
@@ -72,7 +73,7 @@ export function getUserById(id: number): PublicUser | null {
 export function getUserByUsername(username: string): PublicUser | null {
   const row = getDb()
     .prepare(
-      'SELECT id, username, role, active, created_at, last_login, last_ip, dni, email, phone, email_verified, phone_verified FROM users WHERE username = ?'
+      'SELECT id, username, role, active, created_at, last_login, last_ip, dni, email, phone, email_verified, phone_verified, must_change_password FROM users WHERE username = ?'
     )
     .get(username) as UserRow | undefined;
   return row ? toPublicFields(row) : null;
@@ -92,6 +93,7 @@ function toPublicFields(row: UserRow): PublicUser {
     phone: row.phone,
     email_verified: row.email_verified,
     phone_verified: row.phone_verified,
+    must_change_password: row.must_change_password,
     pos_ids: getUserPosIds(row.id),
   };
 }
@@ -129,7 +131,8 @@ export function createUser(input: {
   if (dni.length < 4 || dni.length > 10) {
     throw new HttpError(400, 'DNI inválido: debe ser el número de documento (4 a 10 dígitos)');
   }
-  const password = input.password && input.password.trim() ? input.password : dni;
+  const passwordProvided = Boolean(input.password && input.password.trim());
+  const password = passwordProvided ? input.password! : dni;
   if (password.length < 4) throw new HttpError(400, 'La contraseña debe tener al menos 4 caracteres');
   if (!ROLES.includes(input.role)) throw new HttpError(400, 'Rol inválido');
   const db = getDb();
@@ -138,9 +141,9 @@ export function createUser(input: {
   const hash = bcrypt.hashSync(password, 10);
   const result = db
     .prepare(
-      'INSERT INTO users (username, password_hash, role, dni, email, phone) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO users (username, password_hash, role, dni, email, phone, must_change_password) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(username, hash, input.role, dni, input.email?.trim() ?? '', input.phone?.trim() ?? '');
+    .run(username, hash, input.role, dni, input.email?.trim() ?? '', input.phone?.trim() ?? '', passwordProvided ? 0 : 1);
   const created = getUserById(Number(result.lastInsertRowid));
   if (!created) throw new HttpError(500, 'No se pudo crear el usuario');
   return created;
@@ -182,11 +185,14 @@ export function updateUser(
   return updated;
 }
 
-export function changePassword(id: number, password: string): void {
-  if (password.length < 4) throw new HttpError(400, 'La contraseña debe tener al menos 4 caracteres');
+export function changePassword(id: number, password: string, requireChange = false): void {
+  const normalized = password && password.trim() ? password.trim() : '';
+  if (normalized.length < 4) throw new HttpError(400, 'La contraseña debe tener al menos 4 caracteres');
   if (!getUserById(id)) throw new HttpError(404, 'Usuario no encontrado');
-  const hash = bcrypt.hashSync(password, 10);
-  getDb().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, id);
+  const hash = bcrypt.hashSync(normalized, 10);
+  getDb()
+    .prepare('UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?')
+    .run(hash, requireChange ? 1 : 0, id);
 }
 
 export function deleteUser(id: number): void {

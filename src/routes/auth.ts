@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { beginLogin, verifyTwoFactorLogin, authRequired } from '../middleware/auth';
+import { changePassword } from '../services/user';
 import { ah } from '../lib/http';
 
 export const authRouter = Router();
@@ -32,4 +33,11 @@ authRouter.post(
 
 authRouter.get('/me', authRequired, (req, res) => {
   res.json({ username: req.user!.username, role: req.user!.role });
+});
+
+// Cambio de contraseña del usuario logueado (primer ingreso / cambio voluntario)
+authRouter.post('/me/password', authRequired, (req, res) => {
+  const { password } = z.object({ password: z.string().min(4) }).parse(req.body);
+  changePassword(req.user!.id, password);
+  res.json({ ok: true });
 });

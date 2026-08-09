@@ -21,14 +21,15 @@ declare global {
 }
 
 export type LoginResult =
-  | { token: string; role: string }
-  | { pending2fa: true; token: string; phone: string }
+  | { token: string; role: string; must_change_password: boolean }
+  | { pending2fa: true; token: string; phone: string; must_change_password: boolean }
   | null;
 
 export function beginLogin(username: string, password: string, ip = ''): LoginResult {
   const user = checkCredentials(username, password);
   if (!user) return null;
   touchLogin(user.id, ip);
+  const mc = user.must_change_password === 1;
   if (user.role === 'admin' && twoFactorEnabled()) {
     const phone = beginTwoFactor(user.id);
     return {
@@ -37,6 +38,7 @@ export function beginLogin(username: string, password: string, ip = ''): LoginRe
         expiresIn: '5m',
       }),
       phone,
+      must_change_password: mc,
     };
   }
   return {
@@ -44,10 +46,11 @@ export function beginLogin(username: string, password: string, ip = ''): LoginRe
       expiresIn: '12h',
     }),
     role: user.role,
+    must_change_password: mc,
   };
 }
 
-export function verifyTwoFactorLogin(pendingToken: string, code: string): { token: string; role: string } {
+export function verifyTwoFactorLogin(pendingToken: string, code: string): { token: string; role: string; must_change_password: boolean } {
   let payload: { sub?: number; username?: string; role?: string; stage?: string };
   try {
     payload = jwt.verify(pendingToken, config.jwtSecret) as typeof payload;
@@ -65,6 +68,7 @@ export function verifyTwoFactorLogin(pendingToken: string, code: string): { toke
       expiresIn: '12h',
     }),
     role: user.role,
+    must_change_password: user.must_change_password === 1,
   };
 }
 

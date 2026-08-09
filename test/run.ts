@@ -153,6 +153,19 @@ async function main() {
     assert.ok(checkCredentials('dni_pass', '40555666'), 'debe poder ingresar con su DNI como contraseña');
   });
 
+  await ok('Contraseña: flag de cambio obligatorio al primer ingreso', async () => {
+    const { changePassword } = await import('../src/services/user');
+    const { beginLogin } = await import('../src/middleware/auth');
+    assert.equal(getUserByUsername('dni_pass')!.must_change_password, 1, 'sin contraseña propia → debe cambiar');
+    assert.equal(getUserByUsername('operador_test')!.must_change_password, 0, 'con contraseña propia → no debe cambiar');
+    const login = beginLogin('dni_pass', '40555666', '203.0.113.8') as { must_change_password: boolean };
+    assert.equal(login.must_change_password, true, 'el login expone el flag');
+    changePassword(getUserByUsername('dni_pass')!.id, 'clave1234');
+    assert.equal(getUserByUsername('dni_pass')!.must_change_password, 0, 'al cambiar contraseña se limpia');
+    const login2 = beginLogin('dni_pass', 'clave1234', '203.0.113.7') as { must_change_password: boolean };
+    assert.equal(login2.must_change_password, false);
+  });
+
   await ok('Usuarios: registra IP del último ingreso', async () => {
     const { beginLogin } = await import('../src/middleware/auth');
     const { getUserByUsername } = await import('../src/services/user');

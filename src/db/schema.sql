@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
   email TEXT DEFAULT '',
   phone TEXT DEFAULT '',
   email_verified INTEGER NOT NULL DEFAULT 0,
-  phone_verified INTEGER NOT NULL DEFAULT 0
+  phone_verified INTEGER NOT NULL DEFAULT 0,
+  must_change_password INTEGER NOT NULL DEFAULT 0
 );
 
 -- Verificaciones de identidad (email / teléfono) por usuario

@@ -86,9 +86,17 @@ usersRouter.post('/:id/verify/confirm', ah((req, res) => {
 
 usersRouter.patch('/:id/password', ah((req, res) => {
   const id = Number(req.params.id);
-  const { password } = z.object({ password: z.string().min(4) }).parse(req.body);
-  changePassword(id, password);
-  res.json({ ok: true });
+  const { password, forceChange } = z
+    .object({ password: z.string().min(1), forceChange: z.boolean().optional() })
+    .parse(req.body);
+const normalized = password && password.trim() ? password.trim() : '';
+  const user = listUsers().find((u) => u.id === id);
+  if (!normalized && !user?.dni) {
+    throw new HttpError(400, 'El usuario no tiene DNI: no puede usar contraseña por defecto');
+  }
+  const usesDefault = !normalized || (user !== undefined && normalized === user.dni);
+  changePassword(id, normalized || user!.dni, Boolean(forceChange) || usesDefault);
+  res.json({ ok: true, must_change_password: Boolean(forceChange) || usesDefault });
 }));
 
 usersRouter.delete('/:id', ah((req, res) => {
